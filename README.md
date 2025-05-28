@@ -6,13 +6,13 @@ Hey there! This is a handy Rust tool that takes your video files and turns them 
 
 ## What does it do?
 
-This little program is like having a personal transcriptionist in your terminal. Here's the magic it performs:
+This little program is like having a personal Portuguese transcriptionist in your terminal. Here's the magic it performs:
 
-1. **Takes your video file** (MP4 format) and extracts the audio from it
+1. **Takes your video file** (MP4 format only for now) and extracts the audio from it
 2. **Cleans up the audio** by removing those awkward silences (you know, the ones that make files unnecessarily long)
 3. **Chops up long videos** into manageable 30-minute chunks (because nobody wants to process a 3-hour file in one go)
-4. **Transcribes everything** using OpenAI's Whisper model - it's pretty smart!
-5. **Saves nice text files** with all the transcribed content
+4. **Transcribes everything to Portuguese** using OpenAI's Whisper model - it's pretty smart!
+5. **Saves nice text files** with all the transcribed content in Portuguese
 
 The best part? It cleans up after itself, removing all those temporary files it created during the process. No mess left behind! 🧹
 
@@ -88,7 +88,8 @@ After the program finishes (grab a coffee, it might take a while for long videos
 
 ## Good to know
 
-- **Language**: Currently set to Portuguese (pt). If you need another language, you'll have to tweak the code a bit
+- **Video format**: Currently only accepts MP4 files. Got an AVI or MKV? You'll need to convert it first!
+- **Language**: Currently hardcoded to Portuguese (pt) transcription only. If you need English or other languages, you'll have to modify the code
 - **Temp files**: The program uses `~/.transcribe-workdir/` for temporary files but cleans everything up when done
 - **Audio quality**: Better audio = better transcriptions. The program does its best to clean up the audio, but garbage in, garbage out!
 - **Processing time**: Transcription takes time. A 1-hour video might take 10-15 minutes depending on your machine
@@ -118,3 +119,78 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 Happy transcribing! 🎉
+
+---
+
+## 🇧🇷 Versão em Português
+
+### 🎬 Transcritor de Vídeos
+
+E aí! Essa é uma ferramenta bacana em Rust que pega seus arquivos de vídeo e transforma em transcrições de texto. Perfeito pra quando você precisa converter aulas, reuniões ou qualquer conteúdo em vídeo pra texto.
+
+**Por que Rust?** Esse negócio roda umas 4x mais rápido que a mesma coisa escrita em Python. Porque ninguém quer ficar esperando as transcrições, né?
+
+### O que ela faz?
+
+Esse programinha é tipo ter um transcritor pessoal no seu terminal. Olha a mágica que ele faz:
+
+1. **Pega seu arquivo de vídeo** (só formato MP4 por enquanto) e extrai o áudio dele
+2. **Limpa o áudio** removendo aqueles silêncios chatos (sabe aqueles que deixam os arquivos desnecessariamente longos?)
+3. **Corta vídeos longos** em pedaços de 30 minutos (porque ninguém quer processar um arquivo de 3 horas de uma vez)
+4. **Transcreve tudo pra português** usando o modelo Whisper da OpenAI - é bem esperto!
+5. **Salva arquivos de texto bonitinhos** com todo o conteúdo transcrito em português
+
+A melhor parte? Ele limpa toda a bagunça depois, removendo todos os arquivos temporários que criou durante o processo. Não deixa sujeira pra trás! 🧹
+
+### Pré-requisitos
+
+Antes de começar, você vai precisar:
+
+- **Rust** instalado na sua máquina (óbvio!)
+- **FFmpeg** - Isso é super importante! O programa usa o FFmpeg pra lidar com todo o processamento de áudio/vídeo
+  - No macOS: `brew install ffmpeg`
+  - No Ubuntu/Debian: `sudo apt install ffmpeg`
+  - No Windows: Baixe em [ffmpeg.org](https://ffmpeg.org)
+
+⚠️ **Nota**: Essa ferramenta só foi testada no macOS até agora. Deve funcionar no Linux e Windows também, mas vai por sua conta e risco!
+
+### Como usar
+
+É moleza! Só rodar:
+
+```bash
+cargo run -- --input-video seu-video.mp4 --output-dir transcricoes
+```
+
+Ou se você compilou a versão release:
+
+```bash
+./target/release/transcribe --input-video seu-video.mp4 --output-dir transcricoes
+```
+
+### Exemplo real
+
+Digamos que você tem uma gravação de aula chamada `fisica_101.mp4`:
+
+```bash
+cargo run -- --input-video fisica_101.mp4 --output-dir anotacoes_fisica
+```
+
+Isso vai:
+- Criar um diretório `anotacoes_fisica` (se não existir)
+- Extrair e processar o áudio
+- Gerar arquivos de transcrição tipo `transcricao_parte_000.wav.txt`, `transcricao_parte_001.wav.txt`, etc.
+
+### Primeira vez rodando?
+
+Não se assuste se a primeira execução demorar! O programa precisa baixar o modelo Whisper (uns 500MB) na primeira vez. Ele vai salvar em `~/.whisper-model/` então as próximas execuções serão bem mais rápidas.
+
+### Bom saber
+
+- **Formato de vídeo**: Atualmente só aceita arquivos MP4. Tem um AVI ou MKV? Vai precisar converter primeiro!
+- **Idioma**: Atualmente só transcreve em português (pt). Se precisar de inglês ou outros idiomas, vai ter que mexer no código
+- **Arquivos temporários**: O programa usa `~/.transcribe-workdir/` pra arquivos temporários mas limpa tudo quando termina
+- **Qualidade do áudio**: Áudio melhor = transcrições melhores. O programa faz o possível pra limpar o áudio, mas lixo entra, lixo sai!
+- **Tempo de processamento**: Transcrição leva tempo. Um vídeo de 1 hora pode levar uns 10-15 minutos dependendo da sua máquina
+
+Boas transcrições! 🎉
