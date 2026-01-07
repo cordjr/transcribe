@@ -6,13 +6,13 @@ Hey there! This is a handy Rust tool that takes your video files and turns them 
 
 ## What does it do?
 
-This little program is like having a personal Portuguese transcriptionist in your terminal. Here's the magic it performs:
+This little program is like having a personal transcriptionist in your terminal. Here's the magic it performs:
 
-1. **Takes your video file** (MP4 format only for now) and extracts the audio from it
+1. **Takes your video file** (MP4, MOV, and most FFmpeg-supported formats) and extracts the audio from it
 2. **Cleans up the audio** by removing those awkward silences (you know, the ones that make files unnecessarily long)
 3. **Chops up long videos** into manageable 30-minute chunks (because nobody wants to process a 3-hour file in one go)
-4. **Transcribes everything to Portuguese** using OpenAI's Whisper model - it's pretty smart!
-5. **Saves nice text files** with all the transcribed content in Portuguese
+4. **Transcribes the audio** using OpenAI's Whisper model — default language is Portuguese, but you can pick another with `--language <code>` (e.g., `en`, `pt`, `es`)
+5. **Saves nice text files** with all the transcribed content
 
 The best part? It cleans up after itself, removing all those temporary files it created during the process. No mess left behind! 🧹
 
@@ -43,21 +43,21 @@ cargo build --release
 It's dead simple! Just run:
 
 ```bash
-cargo run -- --input-video your-video.mp4 --output-dir transcriptions
+cargo run -- --input-video your-video.mov --output-dir transcriptions --language en
 ```
 
 Or if you built the release version:
 
 ```bash
-./target/release/transcribe --input-video your-video.mp4 --output-dir transcriptions
+./target/release/transcribe --input-video your-video.mp4 --output-dir transcriptions --language pt
 ```
 
 ### Real example
 
-Say you've got a lecture recording called `physics_101.mp4`:
+Say you've got a lecture recording called `physics_101.mov` and you want English:
 
 ```bash
-cargo run -- --input-video physics_101.mp4 --output-dir physics_notes
+cargo run -- --input-video physics_101.mov --output-dir physics_notes --language en
 ```
 
 This will:
@@ -88,8 +88,8 @@ After the program finishes (grab a coffee, it might take a while for long videos
 
 ## Good to know
 
-- **Video format**: Currently only accepts MP4 files. Got an AVI or MKV? You'll need to convert it first!
-- **Language**: Currently hardcoded to Portuguese (pt) transcription only. If you need English or other languages, you'll have to modify the code
+- **Video format**: Supports MP4, MOV, and most formats FFmpeg can read
+- **Language**: Default is Portuguese (`pt`). Choose another with `--language <code>` (e.g., `en`, `pt`, `es`)
 - **Temp files**: The program uses `~/.transcribe-workdir/` for temporary files but cleans everything up when done
 - **Audio quality**: Better audio = better transcriptions. The program does its best to clean up the audio, but garbage in, garbage out!
 - **Processing time**: Transcription takes time. A 1-hour video might take 10-15 minutes depending on your machine
@@ -134,11 +134,11 @@ E aí! Essa é uma ferramenta bacana em Rust que pega seus arquivos de vídeo e 
 
 Esse programinha é tipo ter um transcritor pessoal no seu terminal. Olha a mágica que ele faz:
 
-1. **Pega seu arquivo de vídeo** (só formato MP4 por enquanto) e extrai o áudio dele
+1. **Pega seu arquivo de vídeo** (MP4, MOV e outros formatos suportados pelo FFmpeg) e extrai o áudio
 2. **Limpa o áudio** removendo aqueles silêncios chatos (sabe aqueles que deixam os arquivos desnecessariamente longos?)
 3. **Corta vídeos longos** em pedaços de 30 minutos (porque ninguém quer processar um arquivo de 3 horas de uma vez)
-4. **Transcreve tudo pra português** usando o modelo Whisper da OpenAI - é bem esperto!
-5. **Salva arquivos de texto bonitinhos** com todo o conteúdo transcrito em português
+4. **Transcreve o áudio** usando o modelo Whisper da OpenAI — por padrão em português, mas você pode escolher com `--language <código>` (ex.: `en`, `pt`, `es`)
+5. **Salva arquivos de texto** com todo o conteúdo transcrito
 
 A melhor parte? Ele limpa toda a bagunça depois, removendo todos os arquivos temporários que criou durante o processo. Não deixa sujeira pra trás! 🧹
 
@@ -159,21 +159,21 @@ Antes de começar, você vai precisar:
 É moleza! Só rodar:
 
 ```bash
-cargo run -- --input-video seu-video.mp4 --output-dir transcricoes
+cargo run -- --input-video seu-video.mov --output-dir transcricoes --language en
 ```
 
 Ou se você compilou a versão release:
 
 ```bash
-./target/release/transcribe --input-video seu-video.mp4 --output-dir transcricoes
+./target/release/transcribe --input-video seu-video.mp4 --output-dir transcricoes --language pt
 ```
 
 ### Exemplo real
 
-Digamos que você tem uma gravação de aula chamada `fisica_101.mp4`:
+Digamos que você tem uma gravação de aula chamada `fisica_101.mov` e quer em inglês:
 
 ```bash
-cargo run -- --input-video fisica_101.mp4 --output-dir anotacoes_fisica
+cargo run -- --input-video fisica_101.mov --output-dir anotacoes_fisica --language en
 ```
 
 Isso vai:
@@ -187,8 +187,8 @@ Não se assuste se a primeira execução demorar! O programa precisa baixar o mo
 
 ### Bom saber
 
-- **Formato de vídeo**: Atualmente só aceita arquivos MP4. Tem um AVI ou MKV? Vai precisar converter primeiro!
-- **Idioma**: Atualmente só transcreve em português (pt). Se precisar de inglês ou outros idiomas, vai ter que mexer no código
+- **Formato de vídeo**: Suporta MP4, MOV e a maioria dos formatos que o FFmpeg consegue abrir
+- **Idioma**: Padrão é português (`pt`). Escolha outro com `--language <código>` (ex.: `en`, `pt`, `es`)
 - **Arquivos temporários**: O programa usa `~/.transcribe-workdir/` pra arquivos temporários mas limpa tudo quando termina
 - **Qualidade do áudio**: Áudio melhor = transcrições melhores. O programa faz o possível pra limpar o áudio, mas lixo entra, lixo sai!
 - **Tempo de processamento**: Transcrição leva tempo. Um vídeo de 1 hora pode levar uns 10-15 minutos dependendo da sua máquina

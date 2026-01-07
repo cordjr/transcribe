@@ -18,7 +18,7 @@ fn main() {
         println!("Error: {}", error);
         return;
     }
-    let (input_video, output_path) = get_args_result.unwrap();
+    let (input_video, output_path, language) = get_args_result.unwrap();
 
     if !ffmpeg_installed() {
         println!("❌ FFmpeg is not installed or not in PATH.");
@@ -40,7 +40,7 @@ fn main() {
     files_to_remove.push(clean_audion_path.clone());
     let paths = split_audio(&clean_audion_path).unwrap();
     for path in paths {
-        transcribe(&path, &output_path).unwrap();
+        transcribe(&path, &output_path, &language).unwrap();
         files_to_remove.push(path.clone());
     }
     println!("🧹 Cleaning temporary files...");
@@ -74,11 +74,12 @@ fn transcribe_work_path() -> Result<PathBuf, Box<dyn Error>> {
     Ok(workdir_path)
 }
 
-fn get_args() -> Result<(String, String), Box<dyn Error>> {
+fn get_args() -> Result<(String, String, String), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
 
     let mut input_video = None;
     let mut output_dir = None;
+    let mut language: String = "pt".to_string(); // default language
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -88,6 +89,12 @@ fn get_args() -> Result<(String, String), Box<dyn Error>> {
             }
             "--output-dir" => {
                 output_dir = args.get(i + 1).cloned();
+                i += 1;
+            }
+            "--language" => {
+                if let Some(val) = args.get(i + 1) {
+                    language = val.clone();
+                }
                 i += 1;
             }
             _ => {}
@@ -102,7 +109,7 @@ fn get_args() -> Result<(String, String), Box<dyn Error>> {
             input_video
         )))
     } else {
-        Ok((input_video, output_dir))
+        Ok((input_video, output_dir, language))
     }
 }
 
@@ -117,8 +124,16 @@ fn ffmpeg_installed() -> bool {
 fn extract_audio(video_path: &str) -> Result<String, String> {
     let work_path = transcribe_work_path().unwrap();
 
-    let base = video_path.strip_suffix(".mp4").unwrap();
-    let audio_raw = format!("{}.wav", work_path.join(base).to_str().unwrap().to_string());
+    // Use file stem safely instead of assuming a specific extension
+    let stem = Path::new(video_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| format!("invalid video filename: {}", video_path))?;
+
+    // Always write the extracted WAV into the workdir
+    let audio_raw_path = work_path.join(format!("{stem}.wav"));
+    let audio_raw = audio_raw_path.to_str().unwrap().to_string();
+
     let status = Command::new("ffmpeg")
         .args([
             "-y",
@@ -135,7 +150,8 @@ fn extract_audio(video_path: &str) -> Result<String, String> {
         ])
         .status();
     match status {
-        Ok(_) => Ok(audio_raw),
+        Ok(s) if s.success() => Ok(audio_raw),
+        Ok(s) => Err(format!("ffmpeg failed with status: {}", s)),
         Err(e) => Err(format!("ffmpeg exited with error: {}", e)),
     }
 }
@@ -198,23 +214,17 @@ fn split_audio(audio_clean: &str) -> Result<Vec<String>, String> {
     }
 }
 
-fn transcribe(audio_path: &str, output_path: &str) -> Result<(), WhisperError> {
-    let model_path_result = model_full_path();
+fn transcribe(audio_path: &str, output_path: &str, language: &str) -> Result<(), WhisperError> {
+    let model_path = match model_full_path() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
+    let model_path_str = model_path.to_str().unwrap();
 
-    if let Err(e) = &model_path_result {
-        eprintln!("{}", e);
-        std::process::exit(1);
-    }
-    let modelo_path = String::from(
-        model_path_result
-            .unwrap()
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap(),
-    );
-
-    let download_result = download_model_if_missing(&modelo_path, WHISPER_MODEL_URL);
+    let download_result = download_model_if_missing(model_path_str, WHISPER_MODEL_URL);
     if let Err(e) = download_result {
         eprintln!("{}", e);
         std::process::exit(1);
@@ -226,7 +236,7 @@ fn transcribe(audio_path: &str, output_path: &str) -> Result<(), WhisperError> {
         std::process::exit(1);
     }
 
-    let ctx = WhisperContext::new(&modelo_path).expect("❌ Error loading model");
+    let ctx = WhisperContext::new(model_path_str).expect("❌ Error loading model");
     // 🎧 Decodifica o áudio WAV para Vec<f32>
     let mut reader = hound::WavReader::open(audio_path).expect("❌ Error opening audio file");
     let samples: Vec<f32> = reader
@@ -237,7 +247,7 @@ fn transcribe(audio_path: &str, output_path: &str) -> Result<(), WhisperError> {
     let mut state = ctx.create_state().expect("❌ Error creating state");
     let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
 
-    params.set_language(Some("pt"));
+    params.set_language(Some(language));
     params.set_translate(false);
 
     println!("⏳ transcribing...");
