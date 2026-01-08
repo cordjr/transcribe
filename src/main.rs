@@ -56,6 +56,7 @@ fn main() {
     println!("✅ All good video file has been transcribed.!");
 }
 
+
 fn model_full_path() -> Result<PathBuf, Box<dyn Error>> {
     let model_path = dirs::home_dir().unwrap().join(Path::new(".whisper-model"));
     if !model_path.exists() {
