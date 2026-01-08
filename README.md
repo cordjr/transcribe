@@ -21,10 +21,11 @@ The best part? It cleans up after itself, removing all those temporary files it 
 Before you dive in, you'll need:
 
 - **Rust** installed on your machine (obviously!)
-- **FFmpeg** - This is super important! The program uses FFmpeg to handle all the audio/video processing
-  - On macOS: `brew install ffmpeg`
-  - On Ubuntu/Debian: `sudo apt install ffmpeg`
-  - On Windows: Download from [ffmpeg.org](https://ffmpeg.org)
+- **FFmpeg development libraries** (used via Rust bindings, no CLI calls). Install system packages so that `pkg-config` can find `libav*`:
+  - On macOS: `brew install ffmpeg pkg-config`
+  - On Ubuntu/Debian: `sudo apt install ffmpeg libavcodec-dev libavformat-dev libavutil-dev libswresample-dev pkg-config`
+  - On other Linux distros: install the equivalent `libav*` dev packages and `pkg-config`
+  - Note: The FFmpeg CLI binary is NOT required anymore.
 
 ⚠️ **Note**: This tool has only been tested on macOS so far. It should work on Linux and Windows too, but your mileage may vary!
 
@@ -93,6 +94,11 @@ After the program finishes (grab a coffee, it might take a while for long videos
 - **Temp files**: The program uses `~/.transcribe-workdir/` for temporary files but cleans everything up when done
 - **Audio quality**: Better audio = better transcriptions. The program does its best to clean up the audio, but garbage in, garbage out!
 - **Processing time**: Transcription takes time. A 1-hour video might take 10-15 minutes depending on your machine
+
+### What changed recently
+- The app now uses FFmpeg libraries directly (via `ffmpeg-next`) instead of spawning the `ffmpeg` CLI.
+- Silence removal uses FFmpeg's `silenceremove` filter through libavfilter for parity with previous behavior.
+- Chunk files are written as `part_000.wav`, `part_001.wav`, ... into `~/.transcribe-workdir/`.
 
 ## Troubleshooting
 

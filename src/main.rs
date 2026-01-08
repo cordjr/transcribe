@@ -7,6 +7,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{env, fs, io};
 
+mod media;
+
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperError};
 const WHISPER_MODEL_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
@@ -20,10 +22,7 @@ fn main() {
     }
     let (input_video, output_path, language) = get_args_result.unwrap();
 
-    if !ffmpeg_installed() {
-        println!("❌ FFmpeg is not installed or not in PATH.");
-        return;
-    }
+    // Using FFmpeg libraries directly; CLI presence is no longer required
 
     let output_dir = Path::new(&output_path);
     if !output_dir.exists() {
@@ -34,11 +33,15 @@ fn main() {
         }
     }
 
-    let audio_path = extract_audio(&input_video).unwrap();
-    files_to_remove.push(audio_path.clone());
-    let clean_audion_path = clean_silence(&audio_path).unwrap();
-    files_to_remove.push(clean_audion_path.clone());
-    let paths = split_audio(&clean_audion_path).unwrap();
+    // Process media in-process with FFmpeg libraries: decode -> resample -> silence removal -> segment
+    let workdir = transcribe_work_path().unwrap();
+    let paths = match media::process_to_segments(Path::new(&input_video), workdir.as_path()) {
+        Ok(v) => v,
+        Err(e) => {
+            println!("Error processing media: {}", e);
+            return;
+        }
+    };
     for path in paths {
         transcribe(&path, &output_path, &language).unwrap();
         files_to_remove.push(path.clone());
@@ -113,106 +116,14 @@ fn get_args() -> Result<(String, String, String), Box<dyn Error>> {
     }
 }
 
-fn ffmpeg_installed() -> bool {
-    Command::new("ffmpeg")
-        .arg("-version")
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
-}
+// ffmpeg CLI no longer required; keeping this function unused
+fn ffmpeg_installed() -> bool { false }
 
-fn extract_audio(video_path: &str) -> Result<String, String> {
-    let work_path = transcribe_work_path().unwrap();
+// Replaced by in-process pipeline in media::process_to_segments
 
-    // Use file stem safely instead of assuming a specific extension
-    let stem = Path::new(video_path)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| format!("invalid video filename: {}", video_path))?;
+// Replaced by in-process pipeline in media::process_to_segments
 
-    // Always write the extracted WAV into the workdir
-    let audio_raw_path = work_path.join(format!("{stem}.wav"));
-    let audio_raw = audio_raw_path.to_str().unwrap().to_string();
-
-    let status = Command::new("ffmpeg")
-        .args([
-            "-y",
-            "-i",
-            video_path,
-            "-vn",
-            "-acodec",
-            "pcm_s16le",
-            "-ar",
-            "16000",
-            "-ac",
-            "1",
-            &audio_raw,
-        ])
-        .status();
-    match status {
-        Ok(s) if s.success() => Ok(audio_raw),
-        Ok(s) => Err(format!("ffmpeg failed with status: {}", s)),
-        Err(e) => Err(format!("ffmpeg exited with error: {}", e)),
-    }
-}
-
-fn clean_silence(audio_path: &str) -> Result<String, String> {
-    let file_name = audio_path
-        .split("/")
-        .last()
-        .unwrap()
-        .to_string()
-        .strip_suffix(".wav")
-        .unwrap()
-        .to_string();
-    let binding = transcribe_work_path().unwrap();
-
-    let work_path = binding.as_path();
-
-    let audio_clean_path = work_path
-        .join(format!("{}.wav", file_name))
-        .to_str()
-        .unwrap()
-        .to_string();
-    let result = Command::new("ffmpeg")
-        .args([
-            "-y", "-i", &audio_path,
-            "-af", "silenceremove=start_periods=1:start_duration=0.3:start_threshold=-40dB:stop_periods=-1:stop_duration=0.3:stop_threshold=-40dB",
-            &audio_clean_path,
-        ])
-        .status();
-    match result {
-        Ok(_) => Ok(audio_clean_path),
-        Err(e) => Err(format!("ffmpeg exited with error: {}", e)),
-    }
-}
-
-fn split_audio(audio_clean: &str) -> Result<Vec<String>, String> {
-    let work_path = transcribe_work_path().unwrap();
-    let output_file_pattern = work_path
-        .join("parte_%03d.wav")
-        .to_str()
-        .unwrap()
-        .to_string();
-
-    let result = Command::new("ffmpeg")
-        .args([
-            "-i",
-            &audio_clean,
-            "-f",
-            "segment",
-            "-segment_time",
-            "1800",
-            "-c",
-            "copy",
-            &output_file_pattern,
-        ])
-        .status();
-    match result {
-        Ok(_) => list_files(work_path.as_path()),
-        Err(e) => Err(format!("❌ ffmpeg exited with error: {}", e)),
-    }
-}
+// Replaced by in-process pipeline in media::process_to_segments
 
 fn transcribe(audio_path: &str, output_path: &str, language: &str) -> Result<(), WhisperError> {
     let model_path = match model_full_path() {
