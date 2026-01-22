@@ -1,4 +1,3 @@
-use std::cell::Ref;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -50,18 +49,7 @@ pub fn process_to_segments(input_video: &Path, workdir: &Path) -> Result<Vec<Str
 
     // Prepare filter graph: abuffer -> silenceremove -> abuffersink
 
-    let mut graph_in = create_grapth()?;
-    let mut graph_out = create_grapth()?;
-
-    let mut in_filter = graph_in
-        .get("in")
-        .ok_or_else(|| "filter src not found".to_string())?;
-    let mut out_filter = graph_out
-        .get("out")
-        .ok_or_else(|| "filter sink not found".to_string())?;
-
-    let mut sink = out_filter.sink();
-    let mut src = in_filter.source();
+    let mut graph = create_grapth()?;
 
     // Prepare segmentation writer state
     let seg_len_samples: usize = (SAMPLE_RATE as usize) * (SEGMENT_SECONDS as usize);
@@ -83,13 +71,15 @@ pub fn process_to_segments(input_video: &Path, workdir: &Path) -> Result<Vec<Str
         WavWriter::create(&file_path, spec).map_err(|e| format!("wav create error: {e}"))
     };
 
-    let mut open_segment = |part_idx: usize,
+    let open_segment = |part_idx: usize,
                             workdir: &Path,
                             paths: &mut Vec<String>|
      -> Result<WavWriter<std::io::BufWriter<std::fs::File>>, String> {
         let file_path = workdir.join(format!("part_{:03}.wav", part_idx));
         let writer = open_next_writer(part_idx, workdir)?;
-        paths.push(file_path.to_string_lossy().to_string());
+        let path_str = file_path.to_string_lossy().to_string();
+        println!("📂 Opening segment file: {}", path_str);
+        paths.push(path_str);
         Ok(writer)
     };
     for (s, packet) in ictx.packets() {
@@ -102,22 +92,38 @@ pub fn process_to_segments(input_video: &Path, workdir: &Path) -> Result<Vec<Str
             let mut dst = frame::Audio::empty();
             resampler.run(&frm, &mut dst).map_err(err_s)?;
             // Feed resampled frame into filter graph
-            src.add(&dst).map_err(err_s)?;
+            {
+                let mut in_filter = graph
+                    .get("Parsed_abuffer_0")
+                    .ok_or_else(|| "abuffer not found".to_string())?;
+                let mut src = in_filter.source();
+                src.add(&dst).map_err(err_s)?;
+            }
+
             // Pull all available filtered frames
             let mut filtered = frame::Audio::empty();
-            while sink.frame(&mut filtered).is_ok() {
+            loop {
+                let mut out_filter = graph
+                    .get("Parsed_abuffersink_2")
+                    .ok_or_else(|| "abuffersink not found".to_string())?;
+                let mut sink = out_filter.sink();
+                if sink.frame(&mut filtered).is_err() {
+                    break;
+                }
                 // Write filtered samples to current segment, rotating by duration
                 let data = filtered.data(0);
                 let samples = data
                     .chunks_exact(2)
-                    .map(|c| i16::from_ne_bytes([c[0], c[1]]));
+                    .map(|c| i16::from_le_bytes([c[0], c[1]]));
+                let mut count = 0;
                 for sample in samples {
+                    count += 1;
                     if current_writer.is_none() {
                         current_writer = Some(open_segment(part_idx, workdir, &mut output_paths)?);
                         written_in_segment = 0;
                     }
                     if written_in_segment >= seg_len_samples {
-                        if let Some(mut w) = current_writer.take() {
+                        if let Some(w) = current_writer.take() {
                             w.finalize().map_err(|e| format!("wav finalize: {e}"))?;
                         }
                         part_idx += 1;
@@ -130,6 +136,9 @@ pub fn process_to_segments(input_video: &Path, workdir: &Path) -> Result<Vec<Str
                     }
                     written_in_segment += 1;
                 }
+                if count > 0 {
+                    println!("📝 Processed {} samples from filtered frame", count);
+                }
             }
         }
     }
@@ -137,18 +146,25 @@ pub fn process_to_segments(input_video: &Path, workdir: &Path) -> Result<Vec<Str
 
     // After decoder EOF, also drain any remaining from filter sink
     let mut filtered = frame::Audio::empty();
-    while sink.frame(&mut filtered).is_ok() {
+    loop {
+        let mut out_filter = graph
+            .get("Parsed_abuffersink_2")
+            .ok_or_else(|| "abuffersink not found".to_string())?;
+        let mut sink = out_filter.sink();
+        if sink.frame(&mut filtered).is_err() {
+            break;
+        }
         let data = filtered.data(0);
         let samples = data
             .chunks_exact(2)
-            .map(|c| i16::from_ne_bytes([c[0], c[1]]));
+            .map(|c| i16::from_le_bytes([c[0], c[1]]));
         for sample in samples {
             if current_writer.is_none() {
                 current_writer = Some(open_segment(part_idx, workdir, &mut output_paths)?);
                 written_in_segment = 0;
             }
             if written_in_segment >= seg_len_samples {
-                if let Some(mut w) = current_writer.take() {
+                if let Some(w) = current_writer.take() {
                     w.finalize().map_err(|e| format!("wav finalize: {e}"))?;
                 }
                 part_idx += 1;
@@ -164,7 +180,7 @@ pub fn process_to_segments(input_video: &Path, workdir: &Path) -> Result<Vec<Str
     }
 
     // Close the last writer if open
-    if let Some(mut w) = current_writer.take() {
+    if let Some(w) = current_writer.take() {
         w.finalize().map_err(|e| format!("wav finalize: {e}"))?;
     }
 
@@ -177,20 +193,16 @@ fn create_grapth() -> Result<Graph, String> {
         "time_base=1/{rate}:sample_rate={rate}:sample_fmt=s16:channel_layout=mono",
         rate = SAMPLE_RATE
     );
-    let abuffer = filter::find("abuffer").ok_or_else(|| "abuffer not found".to_string())?;
-    let abuffersink =
-        filter::find("abuffersink").ok_or_else(|| "abuffersink not found".to_string())?;
-    graph.add(&abuffer, "in", &abuffer_args).map_err(err_s)?;
-    graph.add(&abuffersink, "out", "").map_err(err_s)?;
 
     // Build silenceremove filter spec
-    // Equivalent to:
-    // silenceremove=start_periods=1:start_duration=0.3:start_threshold=-40dB:stop_periods=-1:stop_duration=0.3:stop_threshold=-40dB
+    // Note: we use names that we will also use when adding filters manually to the graph
     let filter_spec = format!(
-        "[in]silenceremove=start_periods=1:start_duration={win}:start_threshold={thr}dB:stop_periods=-1:stop_duration={win}:stop_threshold={thr}dB[out]",
+        "abuffer={abuffer_args} [in]; [in] silenceremove=start_periods=1:start_duration={win}:start_threshold={thr}dB:stop_periods=-1:stop_duration={win}:stop_threshold={thr}dB [out]; [out] abuffersink",
+        abuffer_args = abuffer_args,
         win = SILENCE_WINDOW_SECS,
         thr = SILENCE_THRESHOLD_DB
     );
+
     graph.parse(&filter_spec).map_err(err_s)?;
     graph.validate().map_err(err_s)?;
     Ok(graph)

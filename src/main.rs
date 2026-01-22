@@ -4,7 +4,6 @@ use std::error::Error;
 use std::fs::{create_dir, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::{env, fs, io};
 
 mod media;
@@ -117,9 +116,6 @@ fn get_args() -> Result<(String, String, String), Box<dyn Error>> {
     }
 }
 
-// ffmpeg CLI no longer required; keeping this function unused
-fn ffmpeg_installed() -> bool { false }
-
 // Replaced by in-process pipeline in media::process_to_segments
 
 // Replaced by in-process pipeline in media::process_to_segments
@@ -193,25 +189,6 @@ fn transcribe(audio_path: &str, output_path: &str, language: &str) -> Result<(),
     }
 }
 
-fn list_files(output_path: &Path) -> Result<Vec<String>, String> {
-    let mut paths: Vec<String> = vec![];
-
-    for entry in fs::read_dir(output_path).expect("❌ Error loading WAV file") {
-        let local_entry = entry.expect("❌ Error loading WAV file");
-        let local_path = local_entry.path();
-        let file_name = local_path
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_string();
-        if local_path.is_file() && file_name.contains("parte_") {
-            let full_name = output_path.join(&file_name).to_str().unwrap().to_string();
-            paths.push(full_name);
-        }
-    }
-    Ok(paths)
-}
 
 fn clean_workdir_files() {
     let work_path_result = transcribe_work_path();
