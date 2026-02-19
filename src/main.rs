@@ -12,7 +12,7 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperError};
 const WHISPER_MODEL_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
 fn main() {
-    clean_workdir_files();
+    // clean_workdir_files(); // Temporarily disabled to inspect WAV files
     let mut files_to_remove: Vec<String> = vec![];
     let get_args_result = get_args();
     if let Err(error) = &get_args_result {

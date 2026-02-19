@@ -28,6 +28,7 @@ Thumbs.db
 *.mp4
 *.mp3
 *.wav
+*.mov
 *.txt
 !README.md
 !LICENSE
