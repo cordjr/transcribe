@@ -36,9 +36,10 @@ Head over to the [Releases](https://github.com/cordjr/transcribe/releases) page 
 | Platform | File | Notes |
 |----------|------|-------|
 | Linux x86_64 | `transcribe-linux-x86_64` | Most common Linux distros |
-| macOS Intel | `transcribe-macos-x86_64` | Intel Macs |
 | macOS Apple Silicon | `transcribe-macos-aarch64` | M1/M2/M3 Macs |
 | Windows x86_64 | `transcribe-windows-x86_64.exe` | Windows 10/11 |
+
+> **Note:** macOS Intel (x86_64) builds are not currently available. Intel Mac users can build from source.
 
 #### Linux
 
@@ -54,19 +55,15 @@ sudo mv transcribe-linux-x86_64 /usr/local/bin/transcribe
 transcribe --input-video video.mp4 --output-dir output
 ```
 
-#### macOS
+#### macOS (Apple Silicon)
 
 ```bash
-# For Apple Silicon (M1/M2/M3)
+# Download for M1/M2/M3 Macs
 curl -LO https://github.com/cordjr/transcribe/releases/latest/download/transcribe-macos-aarch64
 chmod +x transcribe-macos-aarch64
 
-# For Intel Macs
-curl -LO https://github.com/cordjr/transcribe/releases/latest/download/transcribe-macos-x86_64
-chmod +x transcribe-macos-x86_64
-
 # Remove quarantine attribute (macOS security)
-xattr -d com.apple.quarantine transcribe-macos-*
+xattr -d com.apple.quarantine transcribe-macos-aarch64
 
 # Move to a directory in your PATH (optional)
 sudo mv transcribe-macos-aarch64 /usr/local/bin/transcribe
@@ -74,6 +71,8 @@ sudo mv transcribe-macos-aarch64 /usr/local/bin/transcribe
 # Run it
 transcribe --input-video video.mp4 --output-dir output
 ```
+
+> **Intel Mac users:** Pre-built binaries are not available. Please build from source (see Option 2 below).
 
 #### Windows
 
@@ -216,9 +215,10 @@ Va ate a pagina de [Releases](https://github.com/cordjr/transcribe/releases) e b
 | Plataforma | Arquivo | Notas |
 |------------|---------|-------|
 | Linux x86_64 | `transcribe-linux-x86_64` | Maioria das distros Linux |
-| macOS Intel | `transcribe-macos-x86_64` | Macs com Intel |
 | macOS Apple Silicon | `transcribe-macos-aarch64` | Macs M1/M2/M3 |
 | Windows x86_64 | `transcribe-windows-x86_64.exe` | Windows 10/11 |
+
+> **Nota:** Binarios para macOS Intel (x86_64) nao estao disponiveis. Usuarios de Macs Intel podem compilar do codigo fonte.
 
 **Linux:**
 ```bash

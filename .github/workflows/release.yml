@@ -22,10 +22,11 @@ jobs:
             artifact_name: transcribe
             asset_name: transcribe-linux-x86_64
 
-          - target: x86_64-apple-darwin
-            os: macos-12
-            artifact_name: transcribe
-            asset_name: transcribe-macos-x86_64
+          # macOS Intel build disabled - no runners available
+          # - target: x86_64-apple-darwin
+          #   os: macos-12
+          #   artifact_name: transcribe
+          #   asset_name: transcribe-macos-x86_64
 
           - target: aarch64-apple-darwin
             os: macos-14
@@ -175,9 +176,9 @@ jobs:
           cp artifacts/transcribe-linux-x86_64/transcribe release/transcribe-linux-x86_64
           chmod +x release/transcribe-linux-x86_64
 
-          # macOS x86_64
-          cp artifacts/transcribe-macos-x86_64/transcribe release/transcribe-macos-x86_64
-          chmod +x release/transcribe-macos-x86_64
+          # macOS x86_64 - disabled, no runners available
+          # cp artifacts/transcribe-macos-x86_64/transcribe release/transcribe-macos-x86_64
+          # chmod +x release/transcribe-macos-x86_64
 
           # macOS ARM64
           cp artifacts/transcribe-macos-aarch64/transcribe release/transcribe-macos-aarch64
