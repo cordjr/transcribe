@@ -83,16 +83,34 @@ jobs:
         if: matrix.os == 'windows-latest'
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Install FFmpeg via vcpkg (Windows)
+      - name: Setup FFmpeg (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: FedericoCarboni/setup-ffmpeg@v3
+        id: setup-ffmpeg
+        with:
+          ffmpeg-version: release
+          architecture: x64
+          linking-type: shared
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure FFmpeg environment (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          if (Test-Path 'C:\vcpkg') { Remove-Item 'C:\vcpkg' -Recurse -Force }
-          git clone https://github.com/Microsoft/vcpkg.git C:\vcpkg
-          C:\vcpkg\bootstrap-vcpkg.bat
-          C:\vcpkg\vcpkg install ffmpeg[core,avcodec,avformat,swresample,swscale]:x64-windows-static-md
-          echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
-          echo "FFMPEG_DIR=C:\vcpkg\installed\x64-windows-static-md" >> $env:GITHUB_ENV
-          echo "PKG_CONFIG_PATH=C:\vcpkg\installed\x64-windows-static-md\lib\pkgconfig" >> $env:GITHUB_ENV
+          $ffmpegPath = "${{ steps.setup-ffmpeg.outputs.ffmpeg-path }}"
+          $ffmpegDir = Split-Path -Parent $ffmpegPath
+          echo "FFMPEG_DIR=$ffmpegDir" >> $env:GITHUB_ENV
+          echo "PATH=$ffmpegDir;$env:PATH" >> $env:GITHUB_ENV
+
+          # Create pkg-config files for ffmpeg-sys-next
+          $pkgConfigDir = "$ffmpegDir\lib\pkgconfig"
+          if (-not (Test-Path $pkgConfigDir)) {
+            New-Item -ItemType Directory -Path $pkgConfigDir -Force
+          }
+          echo "PKG_CONFIG_PATH=$pkgConfigDir" >> $env:GITHUB_ENV
+
+          # List directory contents for debugging
+          echo "FFmpeg directory contents:"
+          Get-ChildItem -Path $ffmpegDir -Recurse | Select-Object FullName
         shell: pwsh
 
       - name: Build release binary (Linux)
@@ -114,8 +132,6 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
-          FFMPEG_DIR: C:\vcpkg\installed\x64-windows-static-md
-          PKG_CONFIG_PATH: C:\vcpkg\installed\x64-windows-static-md\lib\pkgconfig
         shell: pwsh
 
       - name: Strip binary (Linux/macOS)
