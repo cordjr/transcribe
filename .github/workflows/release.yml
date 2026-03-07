@@ -83,33 +83,39 @@ jobs:
         if: matrix.os == 'windows-latest'
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Setup FFmpeg (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: FedericoCarboni/setup-ffmpeg@v3
-        id: setup-ffmpeg
-        with:
-          ffmpeg-version: release
-          architecture: x64
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure FFmpeg environment (Windows)
+      - name: Download and Setup FFmpeg Dev Libraries (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          $ffmpegPath = "${{ steps.setup-ffmpeg.outputs.ffmpeg-path }}"
-          $ffmpegDir = Split-Path -Parent $ffmpegPath
+          # Download FFmpeg shared build with dev libraries from gyan.dev
+          $ffmpegVersion = "6.1.1"
+          $ffmpegUrl = "https://github.com/GyanD/codexffmpeg/releases/download/$ffmpegVersion/ffmpeg-$ffmpegVersion-full_build-shared.zip"
+
+          Write-Host "Downloading FFmpeg from: $ffmpegUrl"
+          Invoke-WebRequest -Uri $ffmpegUrl -OutFile ffmpeg.zip -UseBasicParsing
+
+          # Extract to C:\ffmpeg
+          Write-Host "Extracting FFmpeg..."
+          Expand-Archive -Path ffmpeg.zip -DestinationPath C:\ffmpeg -Force
+
+          # Get the extracted directory name
+          $ffmpegDir = (Get-ChildItem -Path C:\ffmpeg -Directory)[0].FullName
+          Write-Host "FFmpeg directory: $ffmpegDir"
+
+          # Set environment variables for cargo build
           echo "FFMPEG_DIR=$ffmpegDir" >> $env:GITHUB_ENV
-          echo "PATH=$ffmpegDir;$env:PATH" >> $env:GITHUB_ENV
+          echo "$ffmpegDir\bin" >> $env:GITHUB_PATH
 
-          # Create pkg-config files for ffmpeg-sys-next
-          $pkgConfigDir = "$ffmpegDir\lib\pkgconfig"
-          if (-not (Test-Path $pkgConfigDir)) {
-            New-Item -ItemType Directory -Path $pkgConfigDir -Force
-          }
-          echo "PKG_CONFIG_PATH=$pkgConfigDir" >> $env:GITHUB_ENV
+          # ffmpeg-sys-next needs these environment variables
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
 
-          # List directory contents for debugging
-          echo "FFmpeg directory contents:"
-          Get-ChildItem -Path $ffmpegDir -Recurse | Select-Object FullName
+          # List directory structure for debugging
+          Write-Host "FFmpeg directory structure:"
+          Write-Host "=== bin ==="
+          Get-ChildItem -Path "$ffmpegDir\bin" | Select-Object Name
+          Write-Host "=== lib ==="
+          Get-ChildItem -Path "$ffmpegDir\lib" | Select-Object Name
+          Write-Host "=== include ==="
+          Get-ChildItem -Path "$ffmpegDir\include" | Select-Object Name
         shell: pwsh
 
       - name: Build release binary (Linux)
@@ -131,6 +137,8 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+          FFMPEG_DIR: ${{ env.FFMPEG_DIR }}
+          LIBCLANG_PATH: C:\Program Files\LLVM\bin
         shell: pwsh
 
       - name: Strip binary (Linux/macOS)
