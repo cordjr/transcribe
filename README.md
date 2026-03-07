@@ -27,14 +27,73 @@ Before you dive in, you'll need:
   - On other Linux distros: install the equivalent `libav*` dev packages and `pkg-config`
   - Note: The FFmpeg CLI binary is NOT required anymore.
 
-⚠️ **Note**: This tool has only been tested on macOS so far. It should work on Linux and Windows too, but your mileage may vary!
-
 ## Installation
+
+### Option 1: Download Pre-built Binaries (Recommended)
+
+Head over to the [Releases](https://github.com/cordjr/transcribe/releases) page and download the binary for your system:
+
+| Platform | File | Notes |
+|----------|------|-------|
+| Linux x86_64 | `transcribe-linux-x86_64` | Most common Linux distros |
+| macOS Intel | `transcribe-macos-x86_64` | Intel Macs |
+| macOS Apple Silicon | `transcribe-macos-aarch64` | M1/M2/M3 Macs |
+| Windows x86_64 | `transcribe-windows-x86_64.exe` | Windows 10/11 |
+
+#### Linux
+
+```bash
+# Download and make executable
+curl -LO https://github.com/cordjr/transcribe/releases/latest/download/transcribe-linux-x86_64
+chmod +x transcribe-linux-x86_64
+
+# Move to a directory in your PATH (optional)
+sudo mv transcribe-linux-x86_64 /usr/local/bin/transcribe
+
+# Run it
+transcribe --input-video video.mp4 --output-dir output
+```
+
+#### macOS
+
+```bash
+# For Apple Silicon (M1/M2/M3)
+curl -LO https://github.com/cordjr/transcribe/releases/latest/download/transcribe-macos-aarch64
+chmod +x transcribe-macos-aarch64
+
+# For Intel Macs
+curl -LO https://github.com/cordjr/transcribe/releases/latest/download/transcribe-macos-x86_64
+chmod +x transcribe-macos-x86_64
+
+# Remove quarantine attribute (macOS security)
+xattr -d com.apple.quarantine transcribe-macos-*
+
+# Move to a directory in your PATH (optional)
+sudo mv transcribe-macos-aarch64 /usr/local/bin/transcribe
+
+# Run it
+transcribe --input-video video.mp4 --output-dir output
+```
+
+#### Windows
+
+1. Download `transcribe-windows-x86_64.exe` from the [Releases](https://github.com/cordjr/transcribe/releases) page
+2. Open Command Prompt or PowerShell
+3. Navigate to the download folder
+4. Run:
+
+```powershell
+.\transcribe-windows-x86_64.exe --input-video video.mp4 --output-dir output
+```
+
+**Tip:** Add the folder containing the executable to your PATH for easier access.
+
+### Option 2: Build from Source
 
 Clone this bad boy and build it:
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/cordjr/transcribe.git
 cd transcribe
 cargo build --release
 ```
@@ -148,17 +207,57 @@ Esse programinha é tipo ter um transcritor pessoal no seu terminal. Olha a mág
 
 A melhor parte? Ele limpa toda a bagunça depois, removendo todos os arquivos temporários que criou durante o processo. Não deixa sujeira pra trás! 🧹
 
-### Pré-requisitos
+### Instalacao
 
-Antes de começar, você vai precisar:
+#### Opcao 1: Baixar Binarios Pre-compilados (Recomendado)
 
-- **Rust** instalado na sua máquina (óbvio!)
-- **FFmpeg** - Isso é super importante! O programa usa o FFmpeg pra lidar com todo o processamento de áudio/vídeo
-  - No macOS: `brew install ffmpeg`
-  - No Ubuntu/Debian: `sudo apt install ffmpeg`
-  - No Windows: Baixe em [ffmpeg.org](https://ffmpeg.org)
+Va ate a pagina de [Releases](https://github.com/cordjr/transcribe/releases) e baixe o binario pro seu sistema:
 
-⚠️ **Nota**: Essa ferramenta só foi testada no macOS até agora. Deve funcionar no Linux e Windows também, mas vai por sua conta e risco!
+| Plataforma | Arquivo | Notas |
+|------------|---------|-------|
+| Linux x86_64 | `transcribe-linux-x86_64` | Maioria das distros Linux |
+| macOS Intel | `transcribe-macos-x86_64` | Macs com Intel |
+| macOS Apple Silicon | `transcribe-macos-aarch64` | Macs M1/M2/M3 |
+| Windows x86_64 | `transcribe-windows-x86_64.exe` | Windows 10/11 |
+
+**Linux:**
+```bash
+curl -LO https://github.com/cordjr/transcribe/releases/latest/download/transcribe-linux-x86_64
+chmod +x transcribe-linux-x86_64
+./transcribe-linux-x86_64 --input-video video.mp4 --output-dir saida
+```
+
+**macOS:**
+```bash
+# Para Apple Silicon (M1/M2/M3)
+curl -LO https://github.com/cordjr/transcribe/releases/latest/download/transcribe-macos-aarch64
+chmod +x transcribe-macos-aarch64
+xattr -d com.apple.quarantine transcribe-macos-aarch64
+./transcribe-macos-aarch64 --input-video video.mp4 --output-dir saida
+```
+
+**Windows:**
+1. Baixe `transcribe-windows-x86_64.exe` da pagina de [Releases](https://github.com/cordjr/transcribe/releases)
+2. Abra o Prompt de Comando ou PowerShell
+3. Execute:
+```powershell
+.\transcribe-windows-x86_64.exe --input-video video.mp4 --output-dir saida
+```
+
+#### Opcao 2: Compilar do Codigo Fonte
+
+```bash
+git clone https://github.com/cordjr/transcribe.git
+cd transcribe
+cargo build --release
+```
+
+### Pre-requisitos (apenas para compilar do codigo fonte)
+
+- **Rust** instalado na sua maquina
+- **FFmpeg development libraries**:
+  - No macOS: `brew install ffmpeg pkg-config`
+  - No Ubuntu/Debian: `sudo apt install ffmpeg libavcodec-dev libavformat-dev libavutil-dev libswresample-dev pkg-config`
 
 ### Como usar
 
