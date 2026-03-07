@@ -7,6 +7,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Fix for CMake compatibility with old cmake_minimum_required in dependencies
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
 jobs:
   build:
@@ -74,6 +76,8 @@ jobs:
 
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
       - name: Strip binary (Linux/macOS)
         if: matrix.os != 'windows-latest'
