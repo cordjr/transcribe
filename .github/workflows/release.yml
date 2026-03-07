@@ -23,7 +23,7 @@ jobs:
             asset_name: transcribe-linux-x86_64
 
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-12
             artifact_name: transcribe
             asset_name: transcribe-macos-x86_64
 
