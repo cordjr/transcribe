@@ -90,7 +90,6 @@ jobs:
         with:
           ffmpeg-version: release
           architecture: x64
-          linking-type: shared
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure FFmpeg environment (Windows)
