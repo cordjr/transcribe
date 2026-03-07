@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact_name: transcribe
+            asset_name: transcribe-linux-x86_64
+
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact_name: transcribe
+            asset_name: transcribe-macos-x86_64
+
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact_name: transcribe
+            asset_name: transcribe-macos-aarch64
+
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact_name: transcribe.exe
+            asset_name: transcribe-windows-x86_64.exe
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            nasm \
+            pkg-config \
+            libclang-dev \
+            clang
+
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install cmake nasm pkg-config
+
+      - name: Install dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          choco install cmake nasm llvm -y
+          echo "C:\Program Files\NASM" >> $env:GITHUB_PATH
+
+      - name: Setup MSVC (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Strip binary (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+
+          # Linux
+          cp artifacts/transcribe-linux-x86_64/transcribe release/transcribe-linux-x86_64
+          chmod +x release/transcribe-linux-x86_64
+
+          # macOS x86_64
+          cp artifacts/transcribe-macos-x86_64/transcribe release/transcribe-macos-x86_64
+          chmod +x release/transcribe-macos-x86_64
+
+          # macOS ARM64
+          cp artifacts/transcribe-macos-aarch64/transcribe release/transcribe-macos-aarch64
+          chmod +x release/transcribe-macos-aarch64
+
+          # Windows
+          cp artifacts/transcribe-windows-x86_64.exe/transcribe.exe release/transcribe-windows-x86_64.exe
+
+          # Create checksums
+          cd release
+          sha256sum * > checksums-sha256.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
