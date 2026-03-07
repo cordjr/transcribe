@@ -7,7 +7,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Fix for CMake compatibility with old cmake_minimum_required in dependencies
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
 jobs:
@@ -24,12 +23,12 @@ jobs:
             asset_name: transcribe-linux-x86_64
 
           - target: x86_64-apple-darwin
-            os: macos-latest
+            os: macos-13
             artifact_name: transcribe
             asset_name: transcribe-macos-x86_64
 
           - target: aarch64-apple-darwin
-            os: macos-latest
+            os: macos-14
             artifact_name: transcribe
             asset_name: transcribe-macos-aarch64
 
@@ -57,12 +56,19 @@ jobs:
             nasm \
             pkg-config \
             libclang-dev \
-            clang
+            clang \
+            libavcodec-dev \
+            libavformat-dev \
+            libavutil-dev \
+            libavfilter-dev \
+            libavdevice-dev \
+            libswscale-dev \
+            libswresample-dev
 
       - name: Install dependencies (macOS)
-        if: matrix.os == 'macos-latest'
+        if: startsWith(matrix.os, 'macos')
         run: |
-          brew install cmake nasm pkg-config
+          brew install cmake nasm pkg-config ffmpeg
 
       - name: Install dependencies (Windows)
         if: matrix.os == 'windows-latest'
@@ -71,6 +77,7 @@ jobs:
           echo "C:\Program Files\CMake\bin" >> $env:GITHUB_PATH
           echo "C:\Program Files\NASM" >> $env:GITHUB_PATH
           echo "C:\Program Files\LLVM\bin" >> $env:GITHUB_PATH
+        shell: pwsh
 
       - name: Setup MSVC (Windows)
         if: matrix.os == 'windows-latest'
@@ -79,25 +86,37 @@ jobs:
       - name: Install FFmpeg via vcpkg (Windows)
         if: matrix.os == 'windows-latest'
         run: |
+          if (Test-Path 'C:\vcpkg') { Remove-Item 'C:\vcpkg' -Recurse -Force }
           git clone https://github.com/Microsoft/vcpkg.git C:\vcpkg
           C:\vcpkg\bootstrap-vcpkg.bat
-          C:\vcpkg\vcpkg install ffmpeg:x64-windows-static
+          C:\vcpkg\vcpkg install ffmpeg[core,avcodec,avformat,swresample,swscale]:x64-windows-static-md
           echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
-          echo "FFMPEG_DIR=C:\vcpkg\installed\x64-windows-static" >> $env:GITHUB_ENV
+          echo "FFMPEG_DIR=C:\vcpkg\installed\x64-windows-static-md" >> $env:GITHUB_ENV
+          echo "PKG_CONFIG_PATH=C:\vcpkg\installed\x64-windows-static-md\lib\pkgconfig" >> $env:GITHUB_ENV
+        shell: pwsh
+
+      - name: Build release binary (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo build --release --target ${{ matrix.target }}
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+
+      - name: Build release binary (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: cargo build --release --target ${{ matrix.target }}
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+          PKG_CONFIG_PATH: /opt/homebrew/lib/pkgconfig:/usr/local/lib/pkgconfig
+          FFMPEG_DIR: /opt/homebrew:/usr/local
 
       - name: Build release binary (Windows)
         if: matrix.os == 'windows-latest'
         run: cargo build --release --target ${{ matrix.target }}
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
-          FFMPEG_DIR: C:\vcpkg\installed\x64-windows-static
-          PKG_CONFIG_PATH: C:\vcpkg\installed\x64-windows-static\lib\pkgconfig
-
-      - name: Build release binary (Unix)
-        if: matrix.os != 'windows-latest'
-        run: cargo build --release --target ${{ matrix.target }}
-        env:
-          CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+          FFMPEG_DIR: C:\vcpkg\installed\x64-windows-static-md
+          PKG_CONFIG_PATH: C:\vcpkg\installed\x64-windows-static-md\lib\pkgconfig
+        shell: pwsh
 
       - name: Strip binary (Linux/macOS)
         if: matrix.os != 'windows-latest'
