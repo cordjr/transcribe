@@ -1,6 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use crossbeam::channel::{Receiver, Sender};
 use ffmpeg::{codec, filter, format, frame, media};
 use ffmpeg_next as ffmpeg;
 use ffmpeg_next::filter::Graph;
@@ -44,9 +48,6 @@ pub fn process_to_segments(input_video: &Path, workdir: &Path) -> Result<Vec<Str
         format!("{:#x}", decoder.channel_layout().bits())
     };
 
-    println!("📊 Input audio: {}Hz, format={}, channels={}",
-             in_sample_rate, in_sample_fmt, in_channel_layout);
-
     // Create filter graph with high-quality resampling
     let mut graph = create_filter_graph(in_sample_rate, in_sample_fmt, &in_channel_layout)?;
 
@@ -71,7 +72,6 @@ pub fn process_to_segments(input_video: &Path, workdir: &Path) -> Result<Vec<Str
         let writer = WavWriter::create(&file_path, spec)
             .map_err(|e| format!("wav create error: {e}"))?;
         let path_str = file_path.to_string_lossy().to_string();
-        println!("📂 Opening segment file: {}", path_str);
         paths.push(path_str);
         Ok(writer)
     };
@@ -217,8 +217,6 @@ fn create_filter_graph(in_sample_rate: u32, in_sample_fmt: &str, in_channel_layo
         thr = SILENCE_THRESHOLD_DB
     );
 
-    println!("🔧 Filter spec: {}", filter_spec);
-
     graph.parse(&filter_spec).map_err(err_s)?;
     graph.validate().map_err(err_s)?;
 
@@ -227,4 +225,192 @@ fn create_filter_graph(in_sample_rate: u32, in_sample_fmt: &str, in_channel_layo
 
 fn err_s<E: std::fmt::Display>(e: E) -> String {
     format!("{e}")
+}
+
+// --- Live audio capture via cpal ---
+
+const TARGET_SAMPLE_RATE: u32 = 16_000;
+
+pub fn capture_live_audio(
+    device_name: Option<&str>,
+    sample_sender: Sender<Vec<f32>>,
+    stop_signal: Arc<AtomicBool>,
+) -> Result<(), String> {
+    let host = cpal::default_host();
+
+    let device = match device_name {
+        Some(name) => {
+            let devices = host.input_devices().map_err(|e| format!("Failed to list input devices: {e}"))?;
+            let mut found = None;
+            for d in devices {
+                if let Ok(n) = d.name() {
+                    if n == name {
+                        found = Some(d);
+                        break;
+                    }
+                }
+            }
+            found.ok_or_else(|| format!("Audio device '{name}' not found"))?
+        }
+        None => host
+            .default_input_device()
+            .ok_or_else(|| "No default input device available".to_string())?,
+    };
+
+    let device_display_name = device.name().unwrap_or_else(|_| "unknown".to_string());
+    let default_config = device
+        .default_input_config()
+        .map_err(|e| format!("Failed to get default input config: {e}"))?;
+
+    let source_rate = default_config.sample_rate().0;
+    let source_channels = default_config.channels() as usize;
+
+    println!("Audio device: {device_display_name}");
+
+    let config = cpal::StreamConfig {
+        channels: default_config.channels(),
+        sample_rate: default_config.sample_rate(),
+        buffer_size: cpal::BufferSize::Default,
+    };
+
+    let sender = sample_sender.clone();
+    let resample_ratio = TARGET_SAMPLE_RATE as f64 / source_rate as f64;
+
+    let stream = device
+        .build_input_stream(
+            &config,
+            move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                let mono = to_mono(data, source_channels);
+
+                // Resample to 16kHz using linear interpolation
+                let resampled = if source_rate != TARGET_SAMPLE_RATE {
+                    resample_linear(&mono, resample_ratio)
+                } else {
+                    mono
+                };
+
+                if !resampled.is_empty() {
+                    let _ = sender.send(resampled);
+                }
+            },
+            move |err| {
+                eprintln!("Audio stream error: {err}");
+            },
+            None,
+        )
+        .map_err(|e| format!("Failed to build input stream: {e}"))?;
+
+    stream.play().map_err(|e| format!("Failed to start audio stream: {e}"))?;
+
+    // Keep the stream alive until stop signal
+    while !stop_signal.load(Ordering::Relaxed) {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    drop(stream);
+    Ok(())
+}
+
+pub(crate) fn to_mono(data: &[f32], channels: usize) -> Vec<f32> {
+    if channels <= 1 {
+        return data.to_vec();
+    }
+    data.chunks(channels)
+        .map(|frame| frame.iter().sum::<f32>() / channels as f32)
+        .collect()
+}
+
+pub(crate) fn resample_linear(input: &[f32], ratio: f64) -> Vec<f32> {
+    if input.is_empty() {
+        return Vec::new();
+    }
+    let output_len = (input.len() as f64 * ratio).ceil() as usize;
+    let mut output = Vec::with_capacity(output_len);
+    for i in 0..output_len {
+        let src_pos = i as f64 / ratio;
+        let idx = src_pos as usize;
+        let frac = (src_pos - idx as f64) as f32;
+        let sample = if idx + 1 < input.len() {
+            input[idx] * (1.0 - frac) + input[idx + 1] * frac
+        } else if idx < input.len() {
+            input[idx]
+        } else {
+            0.0
+        };
+        output.push(sample);
+    }
+    output
+}
+
+// --- Audio mixer ---
+
+pub fn run_mixer(
+    mic_rx: Receiver<Vec<f32>>,
+    sys_rx: Option<Receiver<Vec<f32>>>,
+    out_tx: Sender<Vec<f32>>,
+    stop_signal: Arc<AtomicBool>,
+) {
+    let mut mic_buf: Vec<f32> = Vec::new();
+    let mut sys_buf: Vec<f32> = Vec::new();
+    let timeout = std::time::Duration::from_millis(50);
+
+    loop {
+        // Drain mic channel
+        match mic_rx.recv_timeout(timeout) {
+            Ok(samples) => mic_buf.extend_from_slice(&samples),
+            Err(crossbeam::channel::RecvTimeoutError::Timeout) => {}
+            Err(crossbeam::channel::RecvTimeoutError::Disconnected) => {
+                if stop_signal.load(Ordering::Relaxed) {
+                    break;
+                }
+            }
+        }
+        while let Ok(samples) = mic_rx.try_recv() {
+            mic_buf.extend_from_slice(&samples);
+        }
+
+        // Drain system audio channel
+        if let Some(ref sys) = sys_rx {
+            while let Ok(samples) = sys.try_recv() {
+                sys_buf.extend_from_slice(&samples);
+            }
+        }
+
+        // Mix and send
+        if !mic_buf.is_empty() || !sys_buf.is_empty() {
+            let mixed = mix_buffers(&mut mic_buf, &mut sys_buf);
+            if !mixed.is_empty() {
+                if out_tx.send(mixed).is_err() {
+                    break;
+                }
+            }
+        }
+
+        if stop_signal.load(Ordering::Relaxed)
+            && mic_buf.is_empty()
+            && sys_buf.is_empty()
+        {
+            break;
+        }
+    }
+}
+
+fn mix_buffers(mic: &mut Vec<f32>, sys: &mut Vec<f32>) -> Vec<f32> {
+    if sys.is_empty() {
+        return std::mem::take(mic);
+    }
+    if mic.is_empty() {
+        return std::mem::take(sys);
+    }
+
+    let len = mic.len().max(sys.len());
+    let mut mixed = Vec::with_capacity(len);
+    for i in 0..len {
+        let m = if i < mic.len() { mic[i] } else { 0.0 };
+        let s = if i < sys.len() { sys[i] } else { 0.0 };
+        mixed.push((m + s).clamp(-1.0, 1.0));
+    }
+    mic.clear();
+    sys.clear();
+    mixed
 }
